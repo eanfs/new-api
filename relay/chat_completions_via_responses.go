@@ -160,13 +160,13 @@ func chatCompletionsViaResponses(c *gin.Context, info *relaycommon.RelayInfo, ad
 
 	httpResp = resp.(*http.Response)
 	clientStream := info.IsStream
-	upstreamStream := responsesUpstreamIsStream(httpResp)
-	info.IsStream = clientStream || upstreamStream
 	if httpResp.StatusCode != http.StatusOK {
 		newApiErr := service.RelayErrorHandler(c.Request.Context(), httpResp, false)
 		service.ResetStatusCode(newApiErr, statusCodeMappingStr)
 		return nil, newApiErr
 	}
+	upstreamStream := responsesUpstreamIsStream(httpResp)
+	info.IsStream = clientStream || upstreamStream
 
 	if upstreamStream && clientStream {
 		usage, newApiErr := openaichannel.OaiResponsesToChatStreamHandler(c, info, httpResp)

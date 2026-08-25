@@ -3,8 +3,20 @@ package relay
 import (
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/relay/channel/codex"
+	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	relayconstant "github.com/QuantumNous/new-api/relay/constant"
+	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func newResp(contentType, body string) *http.Response {
@@ -43,9 +55,9 @@ func TestResponsesUpstreamIsStream(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			resp := newResp(tc.contentType, tc.body)
-			if got := responsesUpstreamIsStream(resp); got != tc.want {
-				t.Fatalf("responsesUpstreamIsStream() = %v, want %v", got, tc.want)
-			}
+			t.Cleanup(func() { require.NoError(t, resp.Body.Close()) })
+
+			assert.Equal(t, tc.want, responsesUpstreamIsStream(resp))
 		})
 	}
 }
@@ -53,18 +65,13 @@ func TestResponsesUpstreamIsStream(t *testing.T) {
 // 嗅探不能吃掉响应体，否则后续 handler 会丢事件。
 func TestResponsesUpstreamIsStreamPreservesBody(t *testing.T) {
 	resp := newResp("", codexSSEBody)
+	t.Cleanup(func() { require.NoError(t, resp.Body.Close()) })
 
-	if !responsesUpstreamIsStream(resp) {
-		t.Fatal("应判定为 SSE")
-	}
+	require.True(t, responsesUpstreamIsStream(resp))
 
 	got, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("读取响应体失败: %v", err)
-	}
-	if string(got) != codexSSEBody {
-		t.Fatalf("响应体被嗅探消耗了\n got: %q\nwant: %q", string(got), codexSSEBody)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, codexSSEBody, string(got))
 }
 
 // 嗅探替换 Body 后，原始 Closer 仍须被调用，避免连接泄漏。
@@ -83,11 +90,105 @@ func TestResponsesUpstreamIsStreamClosesOriginalBody(t *testing.T) {
 	}
 
 	responsesUpstreamIsStream(resp)
-	if err := resp.Body.Close(); err != nil {
-		t.Fatalf("关闭失败: %v", err)
+	require.NoError(t, resp.Body.Close())
+	assert.True(t, closed)
+}
+
+func TestChatCompletionsViaResponsesCodexUsesUpstreamStream(t *testing.T) {
+	oldMode := gin.Mode()
+	gin.SetMode(gin.TestMode)
+	t.Cleanup(func() { gin.SetMode(oldMode) })
+	oldTimeout := constant.StreamingTimeout
+	constant.StreamingTimeout = 30
+	t.Cleanup(func() { constant.StreamingTimeout = oldTimeout })
+
+	streaming := true
+	tests := []struct {
+		name            string
+		clientStream    *bool
+		expectClientSSE bool
+	}{
+		{name: "buffers SSE when client omits stream"},
+		{name: "streams SSE for streaming client", clientStream: &streaming, expectClientSSE: true},
 	}
-	if !closed {
-		t.Fatal("原始 Body 的 Close 未被调用")
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			type upstreamRequestResult struct {
+				stream *bool
+				err    error
+			}
+			upstreamRequest := make(chan upstreamRequestResult, 1)
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var payload struct {
+					Stream *bool `json:"stream"`
+				}
+				err := common.DecodeJson(r.Body, &payload)
+				upstreamRequest <- upstreamRequestResult{stream: payload.Stream, err: err}
+
+				w.Header()["Content-Type"] = nil
+				_, _ = io.WriteString(w, strings.Join([]string{
+					`event: response.created`,
+					`data: {"type":"response.created","response":{"id":"resp_1","model":"gpt-5.6-luna"}}`,
+					``,
+					`data: {"type":"response.output_text.delta","delta":"response text"}`,
+					`data: {"type":"response.done","response":{"model":"gpt-5.6-luna","status":"completed","usage":{"input_tokens":1,"output_tokens":2,"total_tokens":3}}}`,
+					`data: [DONE]`,
+					``,
+				}, "\n"))
+			}))
+			t.Cleanup(server.Close)
+
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+			c.Request.Header.Set("Content-Type", "application/json")
+			c.Set(common.RequestIdKey, "codex-upstream-stream-test")
+
+			request := &dto.GeneralOpenAIRequest{
+				Model:  "gpt-5.6-luna",
+				Stream: tt.clientStream,
+				Messages: []dto.Message{
+					{Role: "user", Content: "Hello"},
+				},
+			}
+			info := &relaycommon.RelayInfo{
+				ChannelMeta: &relaycommon.ChannelMeta{
+					ChannelType:       constant.ChannelTypeCodex,
+					ChannelBaseUrl:    server.URL,
+					ApiKey:            `{"access_token":"test-token","account_id":"test-account"}`,
+					UpstreamModelName: "gpt-5.6-luna",
+				},
+				OriginModelName:    "gpt-5.6-luna",
+				RelayMode:          relayconstant.RelayModeChatCompletions,
+				RequestURLPath:     "/v1/chat/completions",
+				RelayFormat:        types.RelayFormatOpenAI,
+				IsStream:           tt.expectClientSSE,
+				ShouldIncludeUsage: true,
+			}
+
+			usage, newAPIError := chatCompletionsViaResponses(c, info, &codex.Adaptor{}, request)
+			require.Nil(t, newAPIError)
+			require.NotNil(t, usage)
+			assert.Equal(t, 3, usage.TotalTokens)
+			assert.Equal(t, tt.expectClientSSE, info.IsStream)
+
+			result := <-upstreamRequest
+			require.NoError(t, result.err)
+			require.NotNil(t, result.stream)
+			assert.True(t, *result.stream)
+
+			responseBody := recorder.Body.String()
+			assert.Contains(t, responseBody, `"content":"response text"`)
+			if tt.expectClientSSE {
+				assert.Equal(t, "text/event-stream", recorder.Header().Get("Content-Type"))
+				assert.Contains(t, responseBody, "data:")
+				assert.Contains(t, responseBody, `"object":"chat.completion.chunk"`)
+				return
+			}
+			assert.NotContains(t, responseBody, "data:")
+			assert.Contains(t, responseBody, `"object":"chat.completion"`)
+		})
 	}
 }
 
