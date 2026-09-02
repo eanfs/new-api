@@ -41,6 +41,13 @@ COPY --from=builder /build/web/dist ./web/dist
 RUN go build -ldflags "-s -w -X 'github.com/QuantumNous/new-api/common.Version=$(cat VERSION)'" -o new-api
 
 FROM ${DEBIAN_IMAGE}
+# apt 源也走镜像源:deb.debian.org 在部分网络(如 183 构建机)大文件极慢/半挂。
+# 默认 deb.debian.org 时不替换(镜像源同样可跑);经 ARG 换成国内镜像即可加速。
+ARG APT_MIRROR_HOST=deb.debian.org
+RUN if [ "${APT_MIRROR_HOST}" != "deb.debian.org" ]; then \
+      sed -i "s|deb.debian.org|${APT_MIRROR_HOST}|g" \
+        /etc/apt/sources.list.d/debian.sources /etc/apt/sources.list 2>/dev/null || true; \
+    fi
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates tzdata libasan8 wget \
     && rm -rf /var/lib/apt/lists/* \
