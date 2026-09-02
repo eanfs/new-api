@@ -6,6 +6,7 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	"html"
 	"log"
 	"net/http"
 	"os"
@@ -193,6 +194,7 @@ func main() {
 	middleware.SetUpLogger(server)
 	InjectUmamiAnalytics()
 	InjectGoogleAnalytics()
+	InjectShareMeta()
 
 	// 设置路由
 	router.SetRouter(server, router.WebAssets{
@@ -279,6 +281,75 @@ func InjectGoogleAnalytics() {
 	analyticsInject := []byte(analyticsInjectBuilder.String())
 	placeholder := []byte("<!--Google Analytics-->\n")
 	indexPage = bytes.ReplaceAll(indexPage, placeholder, analyticsInject)
+}
+
+// InjectShareMeta 在启动时向 index.html 的 <!--share-meta--> 占位符注入
+// Open Graph / Twitter Card 元标签,内容取自后台「SystemName / Logo / ServerAddress」
+// 设置。手机端(微信、iOS、Telegram 等)生成分享预览卡片时读取的是原始 HTML head,
+// 不执行前端 JS —— 没有这些标签只能回退到默认标题「New API」与默认 /logo.png。
+// 仅启动时注入一次:在后台改 SystemName / Logo 后需重启本服务才生效。
+func InjectShareMeta() {
+	placeholder := []byte("    <!--share-meta-->\n")
+
+	siteName := common.SystemName
+	if siteName == "" {
+		siteName = "New API"
+	}
+	baseURL := strings.TrimRight(shareOption("ServerAddress"), "/")
+	// Logo 为空时回退默认图标;相对地址须拼上协议与域名(og:image 要求绝对 URL)。
+	logo := common.Logo
+	if logo == "" {
+		logo = "/logo.png"
+	}
+	if !isAbsoluteURL(logo) {
+		if !strings.HasPrefix(logo, "/") {
+			logo = "/" + logo
+		}
+		if baseURL != "" {
+			logo = baseURL + logo
+		}
+	}
+	description := os.Getenv("SHARE_DESCRIPTION")
+	if description == "" {
+		description = "Unified AI API gateway and admin dashboard."
+	}
+
+	b := &strings.Builder{}
+	meta := func(name string, content string) {
+		b.WriteString("<meta ")
+		b.WriteString(name)
+		b.WriteString(" content=\"")
+		b.WriteString(html.EscapeString(content))
+		b.WriteString("\" />\n")
+	}
+	if baseURL != "" {
+		meta("property=\"og:url\"", baseURL)
+	}
+	meta("property=\"og:type\"", "website")
+	meta("property=\"og:site_name\"", siteName)
+	meta("property=\"og:title\"", siteName)
+	meta("property=\"og:description\"", description)
+	if logo != "" {
+		meta("property=\"og:image\"", logo)
+		b.WriteString("<link rel=\"apple-touch-icon\" href=\"")
+		b.WriteString(html.EscapeString(logo))
+		b.WriteString("\" />\n")
+		meta("name=\"twitter:card\"", "summary_large_image")
+		meta("name=\"twitter:image\"", logo)
+	}
+
+	indexPage = bytes.ReplaceAll(indexPage, placeholder, []byte(b.String()))
+}
+
+// shareOption 读取 common.OptionMap 里的后台配置项(启动阶段已由 loadOptionsFromDatabase 填充)。
+func shareOption(key string) string {
+	common.OptionMapRWMutex.RLock()
+	defer common.OptionMapRWMutex.RUnlock()
+	return common.OptionMap[key]
+}
+
+func isAbsoluteURL(s string) bool {
+	return strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://")
 }
 
 func InitResources() error {
