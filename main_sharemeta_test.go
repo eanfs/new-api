@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 
@@ -64,5 +65,35 @@ func TestInjectShareMetaRelativeLogoAbsolutized(t *testing.T) {
 	}
 	if strings.Contains(out, `content="/logo.png"`) {
 		t.Errorf("不应出现裸 /logo.png 兜底(默认 New API 图标)\n%s", out)
+	}
+}
+
+// 占位符若被前端构建剥掉,注入要退到 </head> 前,不能静默失效。
+func TestInjectShareMetaFallbackWhenPlaceholderMissing(t *testing.T) {
+	resetIndexPage()
+	// 模拟 dist 里没有 <!--share-meta--> 注释(构建把注释吃掉的最坏情形)
+	placeholder := []byte("    <!--share-meta-->\n")
+	stripped := bytes.ReplaceAll(indexPage, placeholder, nil)
+	if bytes.Equal(stripped, indexPage) {
+		t.Fatal("测试前提失败:原始 indexPage 里没有占位符")
+	}
+	indexPage = stripped
+
+	common.SystemName = "Apex AI"
+	common.Logo = "https://cdn.example.com/apex.png"
+	common.OptionMapRWMutex.Lock()
+	common.OptionMap = map[string]string{"ServerAddress": "https://api.example.com"}
+	common.OptionMapRWMutex.Unlock()
+
+	InjectShareMeta()
+	out := string(indexPage)
+	if !strings.Contains(out, `property="og:title" content="Apex AI"`) {
+		t.Errorf("占位符缺失时兜底注入失败(应插到 </head> 前)\n%s", out)
+	}
+	if !strings.Contains(out, `property="og:image" content="https://cdn.example.com/apex.png"`) {
+		t.Errorf("兜底注入缺 og:image\n%s", out)
+	}
+	if !strings.Contains(out, "</head>") {
+		t.Errorf("兜底注入吞掉了 </head>\n%s", out)
 	}
 }

@@ -338,7 +338,19 @@ func InjectShareMeta() {
 		meta("name=\"twitter:image\"", logo)
 	}
 
-	indexPage = bytes.ReplaceAll(indexPage, placeholder, []byte(b.String()))
+	shareMeta := []byte(b.String())
+	headEnd := []byte("</head>")
+	injected := bytes.ReplaceAll(indexPage, placeholder, shareMeta)
+	if bytes.Equal(injected, indexPage) {
+		// 占位符没被前端构建保留(理论上不该):退到在 </head> 前插入,避免注入静默失效
+		// (否则分享卡片继续显示默认 New API 品牌,正是本注入要修的问题)。
+		fallback := make([]byte, 0, len(shareMeta)+len(headEnd))
+		fallback = append(fallback, shareMeta...)
+		fallback = append(fallback, headEnd...)
+		indexPage = bytes.ReplaceAll(indexPage, headEnd, fallback)
+		return
+	}
+	indexPage = injected
 }
 
 // shareOption 读取 common.OptionMap 里的后台配置项(启动阶段已由 loadOptionsFromDatabase 填充)。
