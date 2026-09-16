@@ -21,6 +21,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { handleServerError } from '@/lib/handle-server-error'
 
 import { getTopupInfo } from '../api'
+import { PAYMENT_TYPES } from '../constants'
 import {
   generatePresetAmounts,
   mergePresetAmounts,
@@ -57,7 +58,8 @@ function parseJsonArray(data: unknown): unknown[] {
 
 function parsePaymentMethods(
   data: unknown,
-  stripeMinTopup: number
+  stripeMinTopup: number,
+  antomMinTopup: number
 ): PaymentMethod[] {
   return parseJsonArray(data)
     .filter(
@@ -69,15 +71,19 @@ function parsePaymentMethods(
       const normalizedMinTopup = Number.isFinite(rawMinTopup) ? rawMinTopup : 0
       const type = typeof item.type === 'string' ? item.type : ''
 
+      let minTopup = normalizedMinTopup
+      if (minTopup <= 0 && type === PAYMENT_TYPES.STRIPE) {
+        minTopup = stripeMinTopup
+      } else if (minTopup <= 0 && type === PAYMENT_TYPES.ANTOM) {
+        minTopup = antomMinTopup
+      }
+
       return {
         name: typeof item.name === 'string' ? item.name : '',
         type,
         color: typeof item.color === 'string' ? item.color : undefined,
         icon: typeof item.icon === 'string' ? item.icon : undefined,
-        min_topup:
-          type === 'stripe' && normalizedMinTopup <= 0
-            ? stripeMinTopup
-            : normalizedMinTopup,
+        min_topup: minTopup,
       }
     })
     .filter((item) => item.name && item.type && item.type !== 'waffo')
@@ -185,7 +191,8 @@ export function useTopupInfo() {
         ...response.data,
         pay_methods: parsePaymentMethods(
           response.data.pay_methods,
-          response.data.stripe_min_topup
+          response.data.stripe_min_topup,
+          response.data.antom_min_topup ?? 0
         ),
         amount_options: parseAmountOptions(response.data.amount_options),
         discount: parseDiscountMap(response.data.discount),

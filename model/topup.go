@@ -30,6 +30,7 @@ const (
 	PaymentMethodCreem        = "creem"
 	PaymentMethodWaffo        = "waffo"
 	PaymentMethodWaffoPancake = "waffo_pancake"
+	PaymentMethodAntom        = "antom"
 	PaymentMethodBalance      = "balance"
 )
 
@@ -38,6 +39,7 @@ const (
 	PaymentProviderStripe       = "stripe"
 	PaymentProviderCreem        = "creem"
 	PaymentProviderWaffo        = "waffo"
+	PaymentProviderAntom        = "antom"
 	PaymentProviderWaffoPancake = "waffo_pancake"
 	PaymentProviderBalance      = "balance"
 )
@@ -467,6 +469,9 @@ func ManualCompleteTopUp(tradeNo string, callerIp string) error {
 		if err := lockForUpdate(tx).Where(refCol+" = ?", tradeNo).First(topUp).Error; err != nil {
 			return errors.New("充值订单不存在")
 		}
+		if topUp.Amount <= 0 {
+			return ErrInvalidTopUpQuota
+		}
 
 		// 幂等处理：已成功直接返回
 		if topUp.Status == common.TopUpStatusSuccess {
@@ -478,10 +483,24 @@ func ManualCompleteTopUp(tradeNo string, callerIp string) error {
 		}
 
 		// 计算应充值额度：
+		// - Antom 订单：直接使用创建时快照中的精确额度（当时的 AntomUnitPrice），
+		//   不按当前设置重算；订阅订单拒绝补单，绝不能产生钱包入账。
 		// - Stripe 订单：Money 代表经分组倍率换算后的美元数量，直接 * QuotaPerUnit
 		// - 其他订单（如易支付）：Amount 为美元数量，* QuotaPerUnit
 		var quotaErr error
-		if topUp.PaymentProvider == PaymentProviderStripe {
+		if topUp.PaymentProvider == PaymentProviderAntom {
+			snapshot := &AntomOrder{}
+			if err := lockForUpdate(tx).Where("trade_no = ?", tradeNo).First(snapshot).Error; err != nil {
+				return errors.New("Antom 订单快照缺失，无法补单")
+			}
+			if snapshot.OrderKind != AntomOrderKindTopUp {
+				return errors.New("订阅订单不支持钱包补单")
+			}
+			if snapshot.UserId != topUp.UserId {
+				return errors.New("Antom order owner mismatch")
+			}
+			quotaToAdd = snapshot.CreditedQuota
+		} else if topUp.PaymentProvider == PaymentProviderStripe {
 			quotaToAdd, quotaErr = common.WalletQuotaFromDecimalStrict(
 				decimal.NewFromFloat(topUp.Money).Mul(decimal.NewFromFloat(common.QuotaPerUnit)),
 			)
@@ -514,6 +533,9 @@ func ManualCompleteTopUp(tradeNo string, callerIp string) error {
 
 	if err != nil {
 		return err
+	}
+	if userId == 0 {
+		return nil
 	}
 
 	// 事务外记录日志，避免阻塞

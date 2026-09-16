@@ -41,9 +41,25 @@ describe('payment amount routing', () => {
         calls.push('pancake')
         return { success: true, data: '4' }
       },
+      antom: async () => ({ message: 'success', data: 5 }),
     })
 
     expect(amount).toBe(18.75)
     expect(calls).toEqual(['waffo:120'])
+  })
+
+  test('accepts Antom numeric quotes without using the generic gateway', async () => {
+    const unavailable = async () => {
+      throw new Error('Wrong payment gateway')
+    }
+    const amount = await requestPaymentAmount(10, PAYMENT_TYPES.ANTOM, {
+      regular: unavailable,
+      stripe: unavailable,
+      waffo: unavailable,
+      waffoPancake: unavailable,
+      antom: async () => ({ message: 'success', data: 12.75 }),
+    })
+
+    expect(amount).toBe(12.75)
   })
 })

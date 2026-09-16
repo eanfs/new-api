@@ -334,7 +334,9 @@ export function SubscriptionsMutateDrawer({
                   name='price_amount'
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>{t('Plan Price')}</FormLabel>
+                      <FormLabel>
+                        {t('Plan Price')} ({form.watch('currency')})
+                      </FormLabel>
                       <FormControl>
                         <Input
                           {...field}

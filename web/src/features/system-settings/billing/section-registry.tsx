@@ -154,6 +154,18 @@ const BILLING_SECTIONS = [
           CreemWebhookSecret: settings.CreemWebhookSecret,
           CreemTestMode: settings.CreemTestMode,
           CreemProducts: settings.CreemProducts,
+          AntomClientId: settings.AntomClientId ?? '',
+          AntomMerchantPrivateKey: settings.AntomMerchantPrivateKey ?? '',
+          AntomPublicKey: settings.AntomPublicKey ?? '',
+          AntomGatewayUrl:
+            settings.AntomGatewayUrl ?? 'https://open-sea-global.alipay.com',
+          AntomSandbox: settings.AntomSandbox ?? false,
+          AntomCurrency: settings.AntomCurrency ?? 'USD',
+          AntomSettlementCurrency: settings.AntomSettlementCurrency ?? '',
+          AntomUnitPrice: settings.AntomUnitPrice ?? 1,
+          AntomMinTopUp: settings.AntomMinTopUp ?? 1,
+          AntomNotifyUrl: settings.AntomNotifyUrl ?? '',
+          AntomReturnUrl: settings.AntomReturnUrl ?? '',
         }}
         waffoDefaultValues={{
           WaffoEnabled: settings.WaffoEnabled ?? false,

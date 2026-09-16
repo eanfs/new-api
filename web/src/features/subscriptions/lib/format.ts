@@ -66,3 +66,22 @@ export function formatTimestamp(ts: number): string {
   if (!ts) return '-'
   return dayjs(ts * 1000).format('YYYY-MM-DD HH:mm:ss')
 }
+
+/**
+ * Format a plan price in the plan's own currency. The plan currency is
+ * authoritative (e.g. Antom charges in the plan currency, not the display
+ * currency), so USD keeps the conventional $ prefix and every other ISO
+ * code is shown as an explicit suffix.
+ */
+export function formatPlanPrice(price: number, currency?: string): string {
+  const code = currency?.trim().toUpperCase() || 'USD'
+  const digits = new Intl.NumberFormat(undefined, {
+    style: 'currency',
+    currency: code,
+  }).resolvedOptions().maximumFractionDigits
+  const normalized = Number(price || 0).toFixed(digits)
+  if (!code || code === 'USD') {
+    return `$${normalized}`
+  }
+  return `${normalized} ${code}`
+}

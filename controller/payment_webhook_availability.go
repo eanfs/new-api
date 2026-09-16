@@ -108,3 +108,29 @@ func isEpayWebhookConfigured() bool {
 func isEpayWebhookEnabled() bool {
 	return isEpayTopUpEnabled()
 }
+
+// isAntomConfigured reports whether the Antom gateway credentials are present.
+func isAntomConfigured() bool {
+	return strings.TrimSpace(setting.AntomClientId) != "" &&
+		strings.TrimSpace(setting.AntomMerchantPrivateKey) != "" &&
+		strings.TrimSpace(setting.AntomPublicKey) != ""
+}
+
+// isAntomTopUpEnabled gates wallet top-ups: compliance, credentials and a
+// positive unit price. Plans carry their own price, so the unit price is
+// only required for wallet top-ups.
+func isAntomTopUpEnabled() bool {
+	return isPaymentComplianceConfirmed() && isAntomConfigured() && setting.AntomUnitPrice > 0
+}
+
+// isAntomSubscriptionEnabled gates subscription one-time purchases.
+func isAntomSubscriptionEnabled() bool {
+	return isPaymentComplianceConfirmed() && isAntomConfigured()
+}
+
+// isAntomWebhookEnabled gates settlement callbacks. Unlike purchase creation
+// it does not require the compliance flag: an already-paid order must still
+// be able to settle even if compliance is revoked afterwards.
+func isAntomWebhookEnabled() bool {
+	return isAntomConfigured()
+}

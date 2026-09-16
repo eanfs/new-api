@@ -125,6 +125,17 @@ func InitOptionMap() {
 	common.OptionMap["WaffoPancakeMinTopUp"] = strconv.Itoa(setting.WaffoPancakeMinTopUp)
 	common.OptionMap["WaffoPancakeStoreID"] = setting.WaffoPancakeStoreID
 	common.OptionMap["WaffoPancakeProductID"] = setting.WaffoPancakeProductID
+	common.OptionMap["AntomClientId"] = setting.AntomClientId
+	common.OptionMap["AntomMerchantPrivateKey"] = setting.AntomMerchantPrivateKey
+	common.OptionMap["AntomPublicKey"] = setting.AntomPublicKey
+	common.OptionMap["AntomGatewayUrl"] = setting.AntomGatewayUrl
+	common.OptionMap["AntomSandbox"] = strconv.FormatBool(setting.AntomSandbox)
+	common.OptionMap["AntomCurrency"] = setting.AntomCurrency
+	common.OptionMap["AntomSettlementCurrency"] = setting.AntomSettlementCurrency
+	common.OptionMap["AntomUnitPrice"] = strconv.FormatFloat(setting.AntomUnitPrice, 'f', -1, 64)
+	common.OptionMap["AntomMinTopUp"] = strconv.Itoa(setting.AntomMinTopUp)
+	common.OptionMap["AntomNotifyUrl"] = setting.AntomNotifyUrl
+	common.OptionMap["AntomReturnUrl"] = setting.AntomReturnUrl
 	common.OptionMap["TopupGroupRatio"] = common.TopupGroupRatio2JSONString()
 	common.OptionMap["Chats"] = setting.Chats2JsonString()
 	common.OptionMap["AutoGroups"] = setting.AutoGroups2JsonString()
@@ -534,6 +545,28 @@ func updateOptionMap(key string, value string) (err error) {
 		setting.WaffoPancakeUnitPrice, _ = strconv.ParseFloat(value, 64)
 	case "WaffoPancakeMinTopUp":
 		setting.WaffoPancakeMinTopUp, _ = strconv.Atoi(value)
+	case "AntomClientId":
+		setting.AntomClientId = value
+	case "AntomMerchantPrivateKey":
+		setting.AntomMerchantPrivateKey = value
+	case "AntomPublicKey":
+		setting.AntomPublicKey = value
+	case "AntomGatewayUrl":
+		setting.AntomGatewayUrl = value
+	case "AntomSandbox":
+		setting.AntomSandbox = value == "true"
+	case "AntomCurrency":
+		setting.AntomCurrency = value
+	case "AntomSettlementCurrency":
+		setting.AntomSettlementCurrency = value
+	case "AntomUnitPrice":
+		setting.AntomUnitPrice, _ = strconv.ParseFloat(value, 64)
+	case "AntomMinTopUp":
+		setting.AntomMinTopUp, _ = strconv.Atoi(value)
+	case "AntomNotifyUrl":
+		setting.AntomNotifyUrl = value
+	case "AntomReturnUrl":
+		setting.AntomReturnUrl = value
 	case "TopupGroupRatio":
 		err = common.UpdateTopupGroupRatioByJSONString(value)
 	case "GitHubClientId":

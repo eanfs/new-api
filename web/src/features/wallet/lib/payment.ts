@@ -93,10 +93,18 @@ export function isWaffoPancakePayment(paymentType: string): boolean {
   return paymentType === PAYMENT_TYPES.WAFFO_PANCAKE
 }
 
+/**
+ * Check if payment method is Antom
+ */
+export function isAntomPayment(paymentType: string): boolean {
+  return paymentType === PAYMENT_TYPES.ANTOM
+}
+
 export interface PaymentProcessors {
   regular: (topupAmount: number, paymentType: string) => Promise<boolean>
   waffo: (topupAmount: number, payMethodIndex: number) => Promise<boolean>
   waffoPancake: (topupAmount: number) => Promise<boolean>
+  antom: (topupAmount: number) => Promise<boolean>
 }
 
 export async function dispatchSelectedPayment(
@@ -114,6 +122,10 @@ export async function dispatchSelectedPayment(
 
   if (isWaffoPancakePayment(paymentMethod.type)) {
     return processors.waffoPancake(topupAmount)
+  }
+
+  if (isAntomPayment(paymentMethod.type)) {
+    return processors.antom(topupAmount)
   }
 
   return processors.regular(topupAmount, paymentMethod.type)
@@ -144,6 +156,10 @@ export function getDefaultPaymentType(topupInfo: TopupInfo | null): string {
     return PAYMENT_TYPES.WAFFO_PANCAKE
   }
 
+  if (topupInfo.enable_antom_topup) {
+    return PAYMENT_TYPES.ANTOM
+  }
+
   return DEFAULT_PAYMENT_TYPE
 }
 
@@ -169,6 +185,10 @@ export function getMinTopupAmount(topupInfo: TopupInfo | null): number {
 
   if (topupInfo.enable_waffo_pancake_topup) {
     return topupInfo.waffo_pancake_min_topup || DEFAULT_MIN_TOPUP
+  }
+
+  if (topupInfo.enable_antom_topup) {
+    return topupInfo.antom_min_topup || DEFAULT_MIN_TOPUP
   }
 
   return DEFAULT_MIN_TOPUP

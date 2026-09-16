@@ -51,7 +51,11 @@ import {
   updateBillingPreference,
 } from '@/features/subscriptions/api'
 import { SubscriptionPurchaseDialog } from '@/features/subscriptions/components/dialogs/subscription-purchase-dialog'
-import { formatDuration, formatResetPeriod } from '@/features/subscriptions/lib'
+import {
+  formatDuration,
+  formatResetPeriod,
+  formatPlanPrice,
+} from '@/features/subscriptions/lib'
 import type {
   PlanRecord,
   UserSubscriptionRecord,
@@ -68,11 +72,12 @@ interface SubscriptionPlansCardProps {
   onAvailabilityChange?: (available: boolean) => void
   userQuota?: number
   onPurchaseSuccess?: () => void | Promise<void>
+  externalRefreshKey?: number
 }
 
 function getEpayMethods(payMethods: PaymentMethod[] = []): PaymentMethod[] {
   return payMethods.filter(
-    (m) => m?.type && m.type !== 'stripe' && m.type !== 'creem'
+    (m) => m?.type && !['stripe', 'creem', 'antom'].includes(m.type)
   )
 }
 
@@ -99,6 +104,7 @@ export function SubscriptionPlansCard({
   onAvailabilityChange,
   userQuota,
   onPurchaseSuccess,
+  externalRefreshKey = 0,
 }: SubscriptionPlansCardProps) {
   const { t } = useTranslation()
 
@@ -162,6 +168,9 @@ export function SubscriptionPlansCard({
     init()
   }, [fetchPlans, fetchSelfSubscription])
 
+  useEffect(() => {
+    if (externalRefreshKey > 0) void fetchSelfSubscription()
+  }, [externalRefreshKey, fetchSelfSubscription])
   const handleRefresh = async () => {
     setRefreshing(true)
     try {
@@ -529,7 +538,7 @@ export function SubscriptionPlansCard({
               const plan = p?.plan
               if (!plan) return null
               const totalAmount = Number(plan.total_amount || 0)
-              const price = Number(plan.price_amount || 0).toFixed(2)
+              const price = formatPlanPrice(plan.price_amount, plan.currency)
               const isPopular = index === 0 && plans.length > 1
               const limit = Number(plan.max_purchase_per_user || 0)
               const count = planPurchaseCountMap.get(plan.id) || 0
@@ -581,7 +590,7 @@ export function SubscriptionPlansCard({
 
                     <div className='py-2'>
                       <span className='text-primary text-2xl font-bold'>
-                        ${price}
+                        {price}
                       </span>
                     </div>
 
@@ -646,6 +655,7 @@ export function SubscriptionPlansCard({
         enableStripe={enableStripe}
         enableCreem={enableCreem}
         enableWaffoPancake={enableWaffoPancake}
+        enableAntom={!!topupInfo?.enable_antom_subscription}
         enableOnlineTopUp={enableOnlineTopUp}
         epayMethods={epayMethods}
         userQuota={userQuota}
