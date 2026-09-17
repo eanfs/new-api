@@ -38,8 +38,9 @@ import {
   paySubscriptionEpay,
   paySubscriptionWaffoPancake,
   paySubscriptionBalance,
+  paySubscriptionAntom,
 } from '../../api'
-import { formatDuration, formatResetPeriod } from '../../lib'
+import { formatDuration, formatResetPeriod, formatPlanPrice } from '../../lib'
 import type { PlanRecord } from '../../types'
 
 interface PaymentMethod {
@@ -54,6 +55,7 @@ interface Props {
   enableStripe?: boolean
   enableCreem?: boolean
   enableWaffoPancake?: boolean
+  enableAntom?: boolean
   enableOnlineTopUp?: boolean
   epayMethods?: PaymentMethod[]
   purchaseLimit?: number
@@ -83,11 +85,13 @@ export function SubscriptionPurchaseDialog(props: Props) {
   const hasCreem = props.enableCreem && !!plan.creem_product_id
   const hasWaffoPancake =
     props.enableWaffoPancake && !!plan.waffo_pancake_product_id
+  const hasAntom = !!props.enableAntom
   const hasEpay =
     props.enableOnlineTopUp && (props.epayMethods || []).length > 0
-  const hasAnyPayment = hasStripe || hasCreem || hasWaffoPancake || hasEpay
+  const hasAnyPayment =
+    hasStripe || hasCreem || hasWaffoPancake || hasAntom || hasEpay
   const totalAmount = Number(plan.total_amount || 0)
-  const price = Number(plan.price_amount || 0).toFixed(2)
+  const price = formatPlanPrice(plan.price_amount, plan.currency)
   const quotaPerUnit =
     currency?.quotaPerUnit && currency.quotaPerUnit > 0
       ? currency.quotaPerUnit
@@ -148,6 +152,28 @@ export function SubscriptionPurchaseDialog(props: Props) {
       if (res.message === 'success' && res.data?.checkout_url) {
         toast.success(t('Redirecting to payment page...'))
         window.location.href = res.data.checkout_url
+      } else {
+        handleServerError(res, t('Payment request failed'))
+      }
+    } catch (error) {
+      handleServerError(error, t('Payment request failed'))
+    } finally {
+      setPaying(false)
+    }
+  }
+
+  const handlePayAntom = async () => {
+    setPaying(true)
+    try {
+      const res = await paySubscriptionAntom({ plan_id: plan.id })
+      if (res.message === 'success' && res.data?.checkout_url) {
+        const url = new URL(res.data.checkout_url)
+        if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+          toast.error(t('Invalid payment redirect URL'))
+          return
+        }
+        toast.success(t('Redirecting to payment page...'))
+        window.location.href = url.href
       } else {
         handleServerError(res, t('Payment request failed'))
       }
@@ -286,7 +312,7 @@ export function SubscriptionPurchaseDialog(props: Props) {
           <Separator />
           <div className='flex items-center justify-between'>
             <span className='text-sm font-medium'>{t('Amount Due')}</span>
-            <span className='text-primary text-lg font-bold'>${price}</span>
+            <span className='text-primary text-lg font-bold'>{price}</span>
           </div>
         </div>
 
@@ -337,8 +363,18 @@ export function SubscriptionPurchaseDialog(props: Props) {
             <p className='text-muted-foreground text-xs'>
               {t('Select payment method')}
             </p>
-            {(hasStripe || hasCreem || hasWaffoPancake) && (
+            {(hasStripe || hasCreem || hasWaffoPancake || hasAntom) && (
               <div className='grid grid-cols-2 gap-2 sm:flex'>
+                {hasAntom && (
+                  <Button
+                    variant='outline'
+                    className='flex-1'
+                    onClick={handlePayAntom}
+                    disabled={paying || limitReached}
+                  >
+                    Antom
+                  </Button>
+                )}
                 {hasStripe && (
                   <Button
                     variant='outline'

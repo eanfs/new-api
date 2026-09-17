@@ -34,7 +34,7 @@ export interface ApiResponse<T = unknown> {
  */
 export type TopupInfoResponse = ApiResponse<TopupInfo>
 export type RedemptionResponse = ApiResponse<number>
-export type AmountResponse = ApiResponse<string>
+export type AmountResponse = ApiResponse<string | number>
 export type PaymentResponse = ApiResponse<Record<string, unknown>> & {
   url?: string
 }
@@ -59,6 +59,28 @@ export type WaffoPancakePaymentResponse = ApiResponse<
     }
   | string
 >
+
+/**
+ * Antom hosted-checkout payment response.
+ * Both wallet and subscription Antom flows return the same shape.
+ */
+export type AntomPaymentResponse = ApiResponse<
+  { checkout_url?: string; order_id?: string } | string
+>
+
+/**
+ * Antom order inquiry response (server queries the gateway; the browser
+ * return URL is never trusted for fulfillment).
+ */
+export type AntomOrderStatusResponse = ApiResponse<{ status: string }>
+
+/**
+ * Antom payment request parameters
+ */
+export interface AntomPaymentRequest {
+  /** Topup amount */
+  amount: number
+}
 
 /**
  * Creem product configuration
@@ -150,6 +172,14 @@ export interface TopupInfo {
   enable_waffo_pancake_topup?: boolean
   /** Minimum topup amount for Waffo Pancake */
   waffo_pancake_min_topup?: number
+  /** Whether Antom topup is enabled */
+  enable_antom_topup?: boolean
+  /** Whether one-time Antom subscription purchase is enabled */
+  enable_antom_subscription?: boolean
+  /** Minimum topup amount for Antom */
+  antom_min_topup?: number
+  /** ISO charge currency used by Antom (e.g. USD) */
+  antom_currency?: string
   /** Whether redemption code usage is enabled */
   enable_redemption?: boolean
   /** Whether compliance confirmation has been completed */

@@ -18,12 +18,15 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 
 import { SectionPageLayout } from '@/components/layout'
 import { useStatus } from '@/hooks/use-status'
 import { useSystemConfig } from '@/hooks/use-system-config'
 import { getSelf } from '@/lib/api'
+import { handleServerError } from '@/lib/handle-server-error'
 
+import { getAntomOrderStatus } from './api'
 import { AffiliateRewardsCard } from './components/affiliate-rewards-card'
 import { BillingHistoryDialog } from './components/dialogs/billing-history-dialog'
 import { CreemConfirmDialog } from './components/dialogs/creem-confirm-dialog'
@@ -39,6 +42,7 @@ import {
   useAffiliate,
   useRedemption,
   useCreemPayment,
+  useAntomPayment,
   useWaffoPayment,
   useWaffoPancakePayment,
 } from './hooks'
@@ -57,6 +61,10 @@ import type {
 
 interface WalletProps {
   initialShowHistory?: boolean
+  /** Antom trade_no from the checkout return URL (?antom_order=...) */
+  antomOrder?: string
+  /** Clears the antom_order query param after it has been consumed */
+  onAntomOrderConsumed?: () => void
 }
 
 export function Wallet(props: WalletProps) {
@@ -79,6 +87,8 @@ export function Wallet(props: WalletProps) {
   const [selectedCreemProduct, setSelectedCreemProduct] =
     useState<CreemProduct | null>(null)
   const [showSubscriptionPanel, setShowSubscriptionPanel] = useState(true)
+  // Bumped after an Antom return inquiry so the subscription card refetches
+  const [antomRefreshTick, setAntomRefreshTick] = useState(0)
 
   const { status } = useStatus()
   const { currency } = useSystemConfig()
@@ -108,6 +118,7 @@ export function Wallet(props: WalletProps) {
   const { processing: waffoProcessing, processWaffoPayment } = useWaffoPayment()
   const { processing: pancakeProcessing, processWaffoPancakePayment } =
     useWaffoPancakePayment()
+  const { processing: antomProcessing, processAntomPayment } = useAntomPayment()
 
   // Fetch and refresh user data
   const fetchUser = useCallback(async () => {
@@ -129,10 +140,79 @@ export function Wallet(props: WalletProps) {
     fetchUser()
   }, [fetchUser])
 
+  // Antom checkout return: the URL param is only a pointer — the order is
+  // re-inquiried server-side once, then balances and subscriptions refresh.
+  // Never treat the browser return itself as proof of payment.
+  const antomOrder = props.antomOrder
+  const onAntomOrderConsumed = props.onAntomOrderConsumed
+  const antomInquiryRef = useRef<{
+    order: string
+    request: ReturnType<typeof getAntomOrderStatus>
+  } | null>(null)
+  useEffect(() => {
+    if (!antomOrder) {
+      return
+    }
+
+    let cancelled = false
+    if (antomInquiryRef.current?.order !== antomOrder) {
+      antomInquiryRef.current = {
+        order: antomOrder,
+        request: getAntomOrderStatus(antomOrder),
+      }
+    }
+    const request = antomInquiryRef.current.request
+
+    const inquireAntomOrder = async () => {
+      try {
+        const response = await request
+        if (cancelled) {
+          return
+        }
+        if (!response.success) {
+          handleServerError(response, t('Failed to query payment status'))
+          return
+        }
+
+        const status = response.success ? response.data?.status : undefined
+        if (status === 'success') {
+          toast.success(t('Payment completed'))
+        } else if (status === 'failed' || status === 'expired') {
+          toast.error(t('Payment not completed'))
+        } else {
+          toast.info(
+            t(
+              'Payment is still processing. Your balance will update once it completes.'
+            )
+          )
+        }
+
+        await fetchUser()
+        if (!cancelled) {
+          setAntomRefreshTick((tick) => tick + 1)
+        }
+      } catch (error) {
+        if (!cancelled) {
+          handleServerError(error, t('Failed to query payment status'))
+        }
+      } finally {
+        if (!cancelled) {
+          onAntomOrderConsumed?.()
+        }
+      }
+    }
+
+    void inquireAntomOrder()
+
+    return () => {
+      cancelled = true
+    }
+  }, [antomOrder, onAntomOrderConsumed, fetchUser, t])
+
   useEffect(() => {
     if (props.initialShowHistory) {
       setBillingDialogOpen(true)
-      window.history.replaceState({}, '', window.location.pathname)
+      // Keep router search state intact, including a simultaneous checkout return.
     }
   }, [props.initialShowHistory])
 
@@ -202,6 +282,7 @@ export function Wallet(props: WalletProps) {
         regular: processPayment,
         waffo: processWaffoPayment,
         waffoPancake: processWaffoPancakePayment,
+        antom: processAntomPayment,
       }
     )
 
@@ -336,6 +417,7 @@ export function Wallet(props: WalletProps) {
                 onAvailabilityChange={handleSubscriptionAvailabilityChange}
                 userQuota={user?.quota}
                 onPurchaseSuccess={fetchUser}
+                externalRefreshKey={antomRefreshTick}
               />
             </div>
 
@@ -360,7 +442,14 @@ export function Wallet(props: WalletProps) {
         paymentAmount={paymentAmount}
         paymentMethod={selectedPaymentMethod}
         calculating={calculating}
-        processing={processing || waffoProcessing || pancakeProcessing}
+        paymentCurrency={
+          selectedPaymentMethod?.type === PAYMENT_TYPES.ANTOM
+            ? topupInfo?.antom_currency
+            : undefined
+        }
+        processing={
+          processing || waffoProcessing || pancakeProcessing || antomProcessing
+        }
         discountRate={getDiscountRate()}
         usdExchangeRate={effectiveUsdExchangeRate}
       />

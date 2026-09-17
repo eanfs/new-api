@@ -18,7 +18,8 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import i18next from 'i18next'
 import { CreditCard, Landmark } from 'lucide-react'
-import { type ReactNode } from 'react'
+import type { ReactNode } from 'react'
+import { LuGlobe } from 'react-icons/lu'
 import { SiAlipay, SiWechat, SiStripe } from 'react-icons/si'
 
 import { ReactIconByName } from '@/components/react-icon-by-name'
@@ -153,6 +154,13 @@ export function getPaymentIcon(
             className='hidden h-full w-full object-contain dark:block'
           />
         </span>
+      )
+    case PAYMENT_TYPES.ANTOM:
+      return (
+        <LuGlobe
+          className={className}
+          style={{ color: PAYMENT_ICON_COLORS[PAYMENT_TYPES.ANTOM] }}
+        />
       )
     default:
       return <CreditCard className={className} />

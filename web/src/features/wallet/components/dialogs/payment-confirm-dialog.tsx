@@ -47,6 +47,8 @@ interface PaymentConfirmDialogProps {
   processing: boolean
   discountRate?: number
   usdExchangeRate?: number
+  /** ISO currency code shown when the gateway charges in its own currency */
+  paymentCurrency?: string
 }
 
 export function PaymentConfirmDialog({
@@ -60,6 +62,7 @@ export function PaymentConfirmDialog({
   processing,
   discountRate = DEFAULT_DISCOUNT_RATE,
   usdExchangeRate = 1,
+  paymentCurrency,
 }: PaymentConfirmDialogProps) {
   const { t } = useTranslation()
   const hasDiscount = discountRate > 0 && discountRate < 1 && paymentAmount > 0
@@ -101,11 +104,16 @@ export function PaymentConfirmDialog({
             ) : (
               <div className='flex items-baseline gap-2'>
                 <span className='text-2xl font-semibold'>
-                  {formatCurrency(paymentAmount)}
+                  {formatCurrency(paymentAmount, paymentCurrency)}
                 </span>
+                {paymentCurrency && (
+                  <span className='text-muted-foreground text-sm font-medium uppercase'>
+                    {paymentCurrency}
+                  </span>
+                )}
                 {hasDiscount && (
                   <span className='text-muted-foreground text-sm line-through'>
-                    {formatCurrency(originalAmount)}
+                    {formatCurrency(originalAmount, paymentCurrency)}
                   </span>
                 )}
               </div>

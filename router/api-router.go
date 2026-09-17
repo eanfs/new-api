@@ -65,6 +65,7 @@ func SetApiRouter(router *gin.Engine) {
 		// :env separates test vs prod URLs so the operator can register each
 		// in Pancake's matching webhook slot; handler enforces env match.
 		apiRouter.POST("/waffo-pancake/webhook/:env", anonymousRequestBodyLimit, controller.WaffoPancakeWebhook)
+		apiRouter.POST("/antom/webhook/:env", anonymousRequestBodyLimit, controller.AntomWebhook)
 
 		// Universal secure verification routes
 		apiRouter.GET("/verify/methods", middleware.UserAuth(), middleware.DisableCache(), controller.GetVerificationMethods)
@@ -122,6 +123,9 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.POST("/waffo/pay", middleware.CriticalRateLimit(), controller.RequestWaffoPay)
 				selfRoute.POST("/waffo-pancake/amount", controller.RequestWaffoPancakeAmount)
 				selfRoute.POST("/waffo-pancake/pay", middleware.CriticalRateLimit(), controller.RequestWaffoPancakePay)
+				selfRoute.POST("/antom/amount", controller.RequestAntomAmount)
+				selfRoute.POST("/antom/pay", middleware.CriticalRateLimit(), controller.RequestAntomPay)
+				selfRoute.GET("/antom/orders/:trade_no", middleware.CriticalRateLimit(), controller.GetAntomOrder)
 				selfRoute.POST("/aff_transfer", middleware.UserCriticalRateLimit("aff-transfer"), controller.TransferAffQuota)
 				selfRoute.PUT("/setting", controller.UpdateUserSetting)
 
@@ -176,6 +180,7 @@ func SetApiRouter(router *gin.Engine) {
 			subscriptionRoute.POST("/stripe/pay", middleware.CriticalRateLimit(), controller.SubscriptionRequestStripePay)
 			subscriptionRoute.POST("/creem/pay", middleware.CriticalRateLimit(), controller.SubscriptionRequestCreemPay)
 			subscriptionRoute.POST("/waffo-pancake/pay", middleware.CriticalRateLimit(), controller.SubscriptionRequestWaffoPancakePay)
+			subscriptionRoute.POST("/antom/pay", middleware.CriticalRateLimit(), controller.SubscriptionRequestAntomPay)
 		}
 		subscriptionAdminRoute := apiRouter.Group("/subscription/admin")
 		subscriptionAdminRoute.Use(middleware.AdminAuth())

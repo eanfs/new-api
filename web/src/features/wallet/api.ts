@@ -39,6 +39,9 @@ import type {
   WaffoPaymentResponse,
   WaffoPancakePaymentRequest,
   WaffoPancakePaymentResponse,
+  AntomPaymentRequest,
+  AntomPaymentResponse,
+  AntomOrderStatusResponse,
 } from './types'
 
 // ============================================================================
@@ -178,6 +181,43 @@ export async function requestWaffoPancakePayment(
   const res = await api.post('/api/user/waffo-pancake/pay', request, {
     skipBusinessError: true,
   } as Record<string, unknown>)
+  return res.data
+}
+
+/**
+ * Calculate payment amount for Antom payment (charge currency, major units)
+ */
+export async function calculateAntomAmount(
+  request: AmountRequest
+): Promise<AmountResponse> {
+  const res = await api.post('/api/user/antom/amount', request, {
+    skipBusinessError: true,
+  } as Record<string, unknown>)
+  return res.data
+}
+
+/**
+ * Request an Antom hosted-checkout session
+ */
+export async function requestAntomPayment(
+  request: AntomPaymentRequest
+): Promise<AntomPaymentResponse> {
+  const res = await api.post('/api/user/antom/pay', request, {
+    skipBusinessError: true,
+  } as Record<string, unknown>)
+  return res.data
+}
+
+/**
+ * Ask the server to inquiry the gateway for an Antom order status.
+ * The browser return URL is never trusted for fulfillment.
+ */
+export async function getAntomOrderStatus(
+  tradeNo: string
+): Promise<AntomOrderStatusResponse> {
+  const res = await api.get(
+    `/api/user/antom/orders/${encodeURIComponent(tradeNo)}`
+  )
   return res.data
 }
 

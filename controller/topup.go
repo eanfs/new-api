@@ -96,6 +96,38 @@ func GetTopUpInfo(c *gin.Context) {
 		}
 	}
 
+	// 如果启用了 Antom 支付，添加到支付方法列表
+	enableAntomTopUp := isAntomTopUpEnabled()
+	antomMinTopUp := setting.AntomMinTopUp
+	if enableAntomTopUp && operation_setting.GetQuotaDisplayType() == operation_setting.QuotaDisplayTypeTokens {
+		// Top-up metadata uses the same input units as the amount endpoint.
+		minimum := decimal.NewFromInt(int64(antomMinTopUp)).Mul(decimal.NewFromFloat(common.QuotaPerUnit)).Ceil()
+		var err error
+		antomMinTopUp, err = common.WalletQuotaFromDecimalStrict(minimum)
+		if err != nil {
+			enableAntomTopUp = false
+		}
+	}
+	if enableAntomTopUp {
+		hasAntom := false
+		for _, method := range payMethods {
+			if method["type"] == model.PaymentMethodAntom {
+				hasAntom = true
+				break
+			}
+		}
+
+		if !hasAntom {
+			antomMethod := map[string]string{
+				"name":      "Antom",
+				"type":      model.PaymentMethodAntom,
+				"color":     "#1677FF",
+				"min_topup": strconv.Itoa(antomMinTopUp),
+			}
+			payMethods = append(payMethods, antomMethod)
+		}
+	}
+
 	data := gin.H{
 		"enable_online_topup":              isEpayTopUpEnabled(),
 		"enable_stripe_topup":              isStripeTopUpEnabled(),
@@ -111,15 +143,19 @@ func GetTopUpInfo(c *gin.Context) {
 			}
 			return nil
 		}(),
-		"creem_products":          setting.CreemProducts,
-		"pay_methods":             payMethods,
-		"min_topup":               operation_setting.MinTopUp,
-		"stripe_min_topup":        setting.StripeMinTopUp,
-		"waffo_min_topup":         setting.WaffoMinTopUp,
-		"waffo_pancake_min_topup": setting.WaffoPancakeMinTopUp,
-		"amount_options":          operation_setting.GetPaymentSetting().AmountOptions,
-		"discount":                operation_setting.GetPaymentSetting().AmountDiscount,
-		"topup_link":              common.TopUpLink,
+		"creem_products":            setting.CreemProducts,
+		"pay_methods":               payMethods,
+		"min_topup":                 operation_setting.MinTopUp,
+		"stripe_min_topup":          setting.StripeMinTopUp,
+		"waffo_min_topup":           setting.WaffoMinTopUp,
+		"waffo_pancake_min_topup":   setting.WaffoPancakeMinTopUp,
+		"amount_options":            operation_setting.GetPaymentSetting().AmountOptions,
+		"discount":                  operation_setting.GetPaymentSetting().AmountDiscount,
+		"topup_link":                common.TopUpLink,
+		"enable_antom_topup":        enableAntomTopUp,
+		"enable_antom_subscription": isAntomSubscriptionEnabled(),
+		"antom_min_topup":           antomMinTopUp,
+		"antom_currency":            setting.AntomCurrency,
 	}
 	common.ApiSuccess(c, data)
 }

@@ -50,14 +50,25 @@ export function formatQuotaShort(quota: number): string {
  * Format currency amount that is already in local currency.
  * This is used for payment amounts that have been calculated via priceRatio.
  */
-export function formatCurrency(amount: number | string): string {
+export function formatCurrency(
+  amount: number | string,
+  currency?: string
+): string {
   const numeric =
     typeof amount === 'number' ? amount : Number.parseFloat(String(amount))
   if (!Number.isFinite(numeric)) return '-'
+  let digits = Math.abs(numeric) >= 1 ? 2 : 4
+  if (currency) {
+    digits =
+      new Intl.NumberFormat(undefined, {
+        style: 'currency',
+        currency,
+      }).resolvedOptions().maximumFractionDigits ?? 2
+  }
 
   return new Intl.NumberFormat(undefined, {
     minimumFractionDigits: 0,
-    maximumFractionDigits: Math.abs(numeric) >= 1 ? 2 : 4,
+    maximumFractionDigits: digits,
   }).format(numeric)
 }
 

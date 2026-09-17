@@ -95,7 +95,7 @@ func GetOptions(c *gin.Context) {
 			strings.HasSuffix(k, "Key") ||
 			strings.HasSuffix(k, "secret") ||
 			strings.HasSuffix(k, "api_key")
-		if isSensitiveKey {
+		if isSensitiveKey && k != "AntomPublicKey" {
 			continue
 		}
 		options = append(options, &model.Option{
@@ -199,6 +199,18 @@ func UpdateOption(c *gin.Context) {
 		option.Value = common.Interface2String(option.Value.(int))
 	default:
 		option.Value = fmt.Sprintf("%v", option.Value)
+	}
+	if strings.HasPrefix(option.Key, "Antom") {
+		value := strings.TrimSpace(option.Value.(string))
+		if option.Key == "AntomMerchantPrivateKey" && value == "" {
+			common.ApiSuccess(c, nil)
+			return
+		}
+		if err := service.ValidateAntomOption(option.Key, value); err != nil {
+			common.ApiErrorMsg(c, err.Error())
+			return
+		}
+		option.Value = value
 	}
 	switch option.Key {
 	case "QuotaForInviter", "QuotaForInvitee":

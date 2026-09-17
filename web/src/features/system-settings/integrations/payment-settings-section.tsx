@@ -177,6 +177,17 @@ const paymentSchema = z.object({
   WaffoPancakeMerchantID: z.string(),
   WaffoPancakePrivateKey: z.string(),
   WaffoPancakeReturnURL: z.string(),
+  AntomClientId: z.string(),
+  AntomMerchantPrivateKey: z.string(),
+  AntomPublicKey: z.string(),
+  AntomGatewayUrl: z.string(),
+  AntomSandbox: z.boolean(),
+  AntomCurrency: z.string(),
+  AntomSettlementCurrency: z.string(),
+  AntomUnitPrice: z.coerce.number().positive(),
+  AntomMinTopUp: z.coerce.number().int().min(1),
+  AntomNotifyUrl: z.string(),
+  AntomReturnUrl: z.string(),
 })
 
 type PaymentFormValues = z.infer<typeof paymentSchema>
@@ -438,6 +449,18 @@ export function PaymentSettingsSection({
       CreemWebhookSecret: values.CreemWebhookSecret.trim(),
       CreemTestMode: values.CreemTestMode,
       CreemProducts: values.CreemProducts.trim(),
+      AntomClientId: values.AntomClientId.trim(),
+      AntomMerchantPrivateKey: values.AntomMerchantPrivateKey.trim(),
+      AntomPublicKey: values.AntomPublicKey.trim(),
+      AntomGatewayUrl: values.AntomGatewayUrl.trim(),
+      AntomSandbox: values.AntomSandbox,
+      AntomCurrency: values.AntomCurrency.trim().toUpperCase(),
+      AntomSettlementCurrency:
+        values.AntomSettlementCurrency.trim().toUpperCase(),
+      AntomUnitPrice: values.AntomUnitPrice,
+      AntomMinTopUp: values.AntomMinTopUp,
+      AntomNotifyUrl: values.AntomNotifyUrl.trim(),
+      AntomReturnUrl: values.AntomReturnUrl.trim(),
       WaffoEnabled: values.WaffoEnabled,
       WaffoSandbox: values.WaffoSandbox,
       WaffoMerchantId: values.WaffoMerchantId.trim(),
@@ -483,6 +506,19 @@ export function PaymentSettingsSection({
       CreemWebhookSecret: initialRef.current.CreemWebhookSecret.trim(),
       CreemTestMode: initialRef.current.CreemTestMode,
       CreemProducts: initialRef.current.CreemProducts.trim(),
+      AntomClientId: initialRef.current.AntomClientId.trim(),
+      AntomMerchantPrivateKey:
+        initialRef.current.AntomMerchantPrivateKey.trim(),
+      AntomPublicKey: initialRef.current.AntomPublicKey.trim(),
+      AntomGatewayUrl: initialRef.current.AntomGatewayUrl.trim(),
+      AntomSandbox: initialRef.current.AntomSandbox,
+      AntomCurrency: initialRef.current.AntomCurrency.trim().toUpperCase(),
+      AntomSettlementCurrency:
+        initialRef.current.AntomSettlementCurrency.trim().toUpperCase(),
+      AntomUnitPrice: initialRef.current.AntomUnitPrice,
+      AntomMinTopUp: initialRef.current.AntomMinTopUp,
+      AntomNotifyUrl: initialRef.current.AntomNotifyUrl.trim(),
+      AntomReturnUrl: initialRef.current.AntomReturnUrl.trim(),
       WaffoEnabled: initialRef.current.WaffoEnabled,
       WaffoSandbox: initialRef.current.WaffoSandbox,
       WaffoMerchantId: initialRef.current.WaffoMerchantId.trim(),
@@ -508,6 +544,48 @@ export function PaymentSettingsSection({
     }
 
     const updates: Array<{ key: string; value: string | number | boolean }> = []
+    if (sanitized.AntomClientId !== initial.AntomClientId) {
+      updates.push({ key: 'AntomClientId', value: sanitized.AntomClientId })
+    }
+    if (
+      sanitized.AntomMerchantPrivateKey &&
+      sanitized.AntomMerchantPrivateKey !== initial.AntomMerchantPrivateKey
+    ) {
+      updates.push({
+        key: 'AntomMerchantPrivateKey',
+        value: sanitized.AntomMerchantPrivateKey,
+      })
+    }
+    if (sanitized.AntomPublicKey !== initial.AntomPublicKey) {
+      updates.push({ key: 'AntomPublicKey', value: sanitized.AntomPublicKey })
+    }
+    if (sanitized.AntomGatewayUrl !== initial.AntomGatewayUrl) {
+      updates.push({ key: 'AntomGatewayUrl', value: sanitized.AntomGatewayUrl })
+    }
+    if (sanitized.AntomSandbox !== initial.AntomSandbox) {
+      updates.push({ key: 'AntomSandbox', value: sanitized.AntomSandbox })
+    }
+    if (sanitized.AntomCurrency !== initial.AntomCurrency) {
+      updates.push({ key: 'AntomCurrency', value: sanitized.AntomCurrency })
+    }
+    if (sanitized.AntomSettlementCurrency !== initial.AntomSettlementCurrency) {
+      updates.push({
+        key: 'AntomSettlementCurrency',
+        value: sanitized.AntomSettlementCurrency,
+      })
+    }
+    if (sanitized.AntomUnitPrice !== initial.AntomUnitPrice) {
+      updates.push({ key: 'AntomUnitPrice', value: sanitized.AntomUnitPrice })
+    }
+    if (sanitized.AntomMinTopUp !== initial.AntomMinTopUp) {
+      updates.push({ key: 'AntomMinTopUp', value: sanitized.AntomMinTopUp })
+    }
+    if (sanitized.AntomNotifyUrl !== initial.AntomNotifyUrl) {
+      updates.push({ key: 'AntomNotifyUrl', value: sanitized.AntomNotifyUrl })
+    }
+    if (sanitized.AntomReturnUrl !== initial.AntomReturnUrl) {
+      updates.push({ key: 'AntomReturnUrl', value: sanitized.AntomReturnUrl })
+    }
 
     if (sanitized.PayAddress !== initial.PayAddress) {
       updates.push({ key: 'PayAddress', value: sanitized.PayAddress })
@@ -879,11 +957,12 @@ export function PaymentSettingsSection({
           />
           <Tabs defaultValue='general' className='min-w-0'>
             <div className='overflow-x-auto pb-1'>
-              <TabsList className='grid min-w-[44rem] grid-cols-6'>
+              <TabsList className='grid min-w-[50rem] grid-cols-7'>
                 <TabsTrigger value='general'>{t('General')}</TabsTrigger>
                 <TabsTrigger value='epay'>Epay</TabsTrigger>
                 <TabsTrigger value='stripe'>{t('Stripe')}</TabsTrigger>
                 <TabsTrigger value='creem'>Creem</TabsTrigger>
+                <TabsTrigger value='antom'>Antom</TabsTrigger>
                 <TabsTrigger value='waffo-pancake'>Waffo Pancake</TabsTrigger>
                 <TabsTrigger value='waffo'>Waffo</TabsTrigger>
               </TabsList>
@@ -1249,6 +1328,155 @@ export function PaymentSettingsSection({
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
+                    )}
+                  />
+                </div>
+              </div>
+            </TabsContent>
+            <TabsContent value='antom' className={paymentTabContentClassName}>
+              <div className='space-y-4'>
+                <div>
+                  <h3 className='text-lg font-medium'>{t('Antom Gateway')}</h3>
+                  <p className='text-muted-foreground text-sm'>
+                    {t(
+                      'Hosted checkout for wallet recharge and one-time subscription purchases. No recurring billing.'
+                    )}
+                  </p>
+                </div>
+                <Alert>
+                  <AlertTitle>{t('Webhook Configuration:')}</AlertTitle>
+                  <AlertDescription>
+                    <code className='break-all'>
+                      {currentFormValues.AntomNotifyUrl.trim() ||
+                        `<ServerAddress>/api/antom/webhook/${currentFormValues.AntomSandbox ? 'test' : 'prod'}`}
+                    </code>
+                    <p>
+                      {t(
+                        'Use the regional gateway and keys from the same Antom environment. Leave callback URLs blank to use the server defaults.'
+                      )}
+                    </p>
+                  </AlertDescription>
+                </Alert>
+                <div className='grid gap-6 md:grid-cols-2'>
+                  {(
+                    [
+                      ['AntomClientId', t('Client ID')],
+                      ['AntomMerchantPrivateKey', t('Merchant private key')],
+                      ['AntomPublicKey', t('Antom public key')],
+                      ['AntomGatewayUrl', t('Regional gateway URL')],
+                      ['AntomCurrency', t('Charge currency')],
+                      [
+                        'AntomSettlementCurrency',
+                        t('Settlement currency (optional)'),
+                      ],
+                      ['AntomNotifyUrl', t('Notification URL (optional)')],
+                      ['AntomReturnUrl', t('Return URL (optional)')],
+                    ] as const
+                  ).map(([name, label]) => (
+                    <FormField
+                      key={name}
+                      control={form.control}
+                      name={name}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>{label}</FormLabel>
+                          <FormControl>
+                            <Input
+                              {...field}
+                              type={
+                                name === 'AntomMerchantPrivateKey'
+                                  ? 'password'
+                                  : 'text'
+                              }
+                              autoComplete={
+                                name === 'AntomMerchantPrivateKey'
+                                  ? 'new-password'
+                                  : 'off'
+                              }
+                              onPaste={(event) => {
+                                if (
+                                  name !== 'AntomMerchantPrivateKey' &&
+                                  name !== 'AntomPublicKey'
+                                ) {
+                                  return
+                                }
+                                // Password/text inputs strip line breaks; retain the PEM's DER body.
+                                const pem = event.clipboardData
+                                  .getData('text')
+                                  .trim()
+                                  .match(
+                                    /^-----BEGIN ([A-Z ]+)-----\s+([A-Za-z0-9+/=\s]+)\s+-----END \1-----$/
+                                  )
+                                if (pem) {
+                                  event.preventDefault()
+                                  field.onChange(pem[2].replaceAll(/\s/g, ''))
+                                }
+                              }}
+                            />
+                          </FormControl>
+                          {name === 'AntomMerchantPrivateKey' && (
+                            <FormDescription>
+                              {t('Leave blank unless rotating the secret')}
+                            </FormDescription>
+                          )}
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  ))}
+                  <FormField
+                    control={form.control}
+                    name='AntomUnitPrice'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>
+                          {t('Unit price (charge currency / USD)')}
+                        </FormLabel>
+                        <FormControl>
+                          <Input
+                            type='number'
+                            min={0}
+                            step='any'
+                            {...safeNumberFieldProps(field)}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name='AntomMinTopUp'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t('Minimum top-up (USD)')}</FormLabel>
+                        <FormControl>
+                          <Input
+                            type='number'
+                            min={1}
+                            step={1}
+                            {...safeNumberFieldProps(field)}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name='AntomSandbox'
+                    render={({ field }) => (
+                      <SettingsSwitchItem>
+                        <SettingsSwitchContent>
+                          <FormLabel>{t('Sandbox mode')}</FormLabel>
+                        </SettingsSwitchContent>
+                        <FormControl>
+                          <Switch
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                          />
+                        </FormControl>
+                      </SettingsSwitchItem>
                     )}
                   />
                 </div>

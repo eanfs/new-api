@@ -17,12 +17,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { createFileRoute } from '@tanstack/react-router'
+import { useCallback } from 'react'
 import { z } from 'zod'
 
 import { Wallet } from '@/features/wallet'
 
 const walletSearchSchema = z.object({
   show_history: z.boolean().optional(),
+  antom_order: z.string().trim().min(1).max(128).optional().catch(undefined),
 })
 
 export const Route = createFileRoute('/_authenticated/wallet/')({
@@ -31,6 +33,19 @@ export const Route = createFileRoute('/_authenticated/wallet/')({
 })
 
 function RouteComponent() {
-  const { show_history } = Route.useSearch()
-  return <Wallet initialShowHistory={show_history} />
+  const { show_history, antom_order } = Route.useSearch()
+  const navigate = Route.useNavigate()
+  const consumeAntomOrder = useCallback(() => {
+    void navigate({
+      search: (previous) => ({ ...previous, antom_order: undefined }),
+      replace: true,
+    })
+  }, [navigate])
+  return (
+    <Wallet
+      initialShowHistory={show_history}
+      antomOrder={antom_order}
+      onAntomOrderConsumed={consumeAntomOrder}
+    />
+  )
 }

@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { type ColumnDef } from '@tanstack/react-table'
+import type { ColumnDef } from '@tanstack/react-table'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -26,7 +26,7 @@ import { StatusBadge } from '@/components/status-badge'
 import { TableId } from '@/components/table-id'
 import { formatQuota } from '@/lib/format'
 
-import { formatDuration, formatResetPeriod } from '../lib'
+import { formatDuration, formatResetPeriod, formatPlanPrice } from '../lib'
 import type { PlanRecord } from '../types'
 import { DataTableRowActions } from './data-table-row-actions'
 
@@ -69,7 +69,10 @@ export function useSubscriptionsColumns(): ColumnDef<PlanRecord>[] {
         header: t('Price'),
         cell: ({ row }) => (
           <span className='font-semibold text-emerald-600'>
-            ${Number(row.original.plan.price_amount || 0).toFixed(2)}
+            {formatPlanPrice(
+              row.original.plan.price_amount,
+              row.original.plan.currency
+            )}
           </span>
         ),
         size: 100,
