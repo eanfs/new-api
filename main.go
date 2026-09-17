@@ -290,35 +290,80 @@ func InjectGoogleAnalytics() {
 	indexPage = bytes.ReplaceAll(indexPage, placeholder, analyticsInject)
 }
 
+// shareMetaSettings 是一次分享元标签渲染所需的配置快照。
+type shareMetaSettings struct {
+	SiteName      string
+	ServerAddress string
+	Logo          string
+	Description   string
+}
+
 // InjectShareMeta 在启动时向 index.html 的 <!--share-meta--> 占位符注入
 // Open Graph / Twitter Card 元标签,内容取自后台「SystemName / Logo / ServerAddress」
 // 设置。手机端(微信、iOS、Telegram 等)生成分享预览卡片时读取的是原始 HTML head,
 // 不执行前端 JS —— 没有这些标签只能回退到默认标题「New API」与默认 /logo.png。
 // 仅启动时注入一次:在后台改 SystemName / Logo 后需重启本服务才生效。
 func InjectShareMeta() {
-	placeholder := []byte("    <!--share-meta-->\n")
+	// SystemName / Logo / ServerAddress 由 model.updateOptionMap 在同一把写锁内一起更新,
+	// 这里用一把读锁一次性取出,避免读到相互不一致的三元组。
+	common.OptionMapRWMutex.RLock()
+	cfg := shareMetaSettings{
+		SiteName:      common.OptionMap["SystemName"],
+		ServerAddress: common.OptionMap["ServerAddress"],
+		Logo:          common.OptionMap["Logo"],
+	}
+	common.OptionMapRWMutex.RUnlock()
+	cfg.Description = os.Getenv("SHARE_DESCRIPTION")
 
-	siteName := common.SystemName
+	injected, err := renderShareMeta(indexPage, cfg)
+	if err != nil {
+		common.SysError(fmt.Sprintf("inject share meta failed: %v", err))
+		return
+	}
+	indexPage = injected
+}
+
+// renderShareMeta 把后台配置渲染成 Open Graph / Twitter Card 标签并注入 page。
+// page 为完整的 index.html:优先替换 <!--share-meta--> 占位符,占位符缺失时退到
+// 第一个 </head> 前插入。两者都不存在时返回错误,由调用方记录,避免注入静默失效。
+func renderShareMeta(page []byte, cfg shareMetaSettings) ([]byte, error) {
+	siteName := cfg.SiteName
 	if siteName == "" {
+		// 未配置系统名称时保持默认品牌,否则分享卡片标题会变成空白。
 		siteName = "New API"
 	}
-	baseURL := strings.TrimRight(shareOption("ServerAddress"), "/")
-	// Logo 为空时回退默认图标;相对地址须拼上协议与域名(og:image 要求绝对 URL)。
-	logo := common.Logo
+	description := cfg.Description
+	if description == "" {
+		description = "Unified AI API gateway and admin dashboard."
+	}
+	baseURL := strings.TrimRight(cfg.ServerAddress, "/")
+
+	// og:image 等标签会被微信 / Telegram / iOS 直接抓取,必须是绝对 http(s) URL。
+	// 只有两种输入可用:绝对 http(s) URL,以及能拼上 ServerAddress 的根相对路径;
+	// 其余(data:、协议相对 //host/...、裸域名等)一律跳过图片标签。
+	logo := cfg.Logo
 	if logo == "" {
 		logo = "/logo.png"
 	}
-	if !isAbsoluteURL(logo) {
-		if !strings.HasPrefix(logo, "/") {
-			logo = "/" + logo
-		}
-		if baseURL != "" {
-			logo = baseURL + logo
+	var imageURL string
+	lowerLogo := strings.ToLower(logo)
+	switch {
+	case strings.HasPrefix(lowerLogo, "http://"), strings.HasPrefix(lowerLogo, "https://"):
+		imageURL = logo
+	case strings.HasPrefix(logo, "/") && !strings.HasPrefix(logo, "//"):
+		imageURL = baseURL + logo
+	}
+	if imageURL != "" {
+		lowerImage := strings.ToLower(imageURL)
+		if !strings.HasPrefix(lowerImage, "http://") && !strings.HasPrefix(lowerImage, "https://") {
+			// ServerAddress 自身不是绝对地址,拼出来的图片 URL 同样不可用。
+			imageURL = ""
 		}
 	}
-	description := os.Getenv("SHARE_DESCRIPTION")
-	if description == "" {
-		description = "Unified AI API gateway and admin dashboard."
+	if imageURL == "" {
+		common.SysError(fmt.Sprintf(
+			"share meta: Logo %q 解析不出绝对 http(s) 图片地址,已跳过 og:image / twitter:image / apple-touch-icon;"+
+				"请在后台配置 ServerAddress(与 Logo)后重启", logo))
 	}
 
 	b := &strings.Builder{}
@@ -329,46 +374,43 @@ func InjectShareMeta() {
 		b.WriteString(html.EscapeString(content))
 		b.WriteString("\" />\n")
 	}
-	if baseURL != "" {
+	lowerBase := strings.ToLower(baseURL)
+	if strings.HasPrefix(lowerBase, "http://") || strings.HasPrefix(lowerBase, "https://") {
 		meta("property=\"og:url\"", baseURL)
 	}
 	meta("property=\"og:type\"", "website")
 	meta("property=\"og:site_name\"", siteName)
 	meta("property=\"og:title\"", siteName)
 	meta("property=\"og:description\"", description)
-	if logo != "" {
-		meta("property=\"og:image\"", logo)
+	if imageURL != "" {
+		meta("property=\"og:image\"", imageURL)
 		b.WriteString("<link rel=\"apple-touch-icon\" href=\"")
-		b.WriteString(html.EscapeString(logo))
+		b.WriteString(html.EscapeString(imageURL))
 		b.WriteString("\" />\n")
 		meta("name=\"twitter:card\"", "summary_large_image")
-		meta("name=\"twitter:image\"", logo)
+		meta("name=\"twitter:image\"", imageURL)
 	}
-
 	shareMeta := []byte(b.String())
-	headEnd := []byte("</head>")
-	injected := bytes.ReplaceAll(indexPage, placeholder, shareMeta)
-	if bytes.Equal(injected, indexPage) {
-		// 占位符没被前端构建保留(理论上不该):退到在 </head> 前插入,避免注入静默失效
-		// (否则分享卡片继续显示默认 New API 品牌,正是本注入要修的问题)。
-		fallback := make([]byte, 0, len(shareMeta)+len(headEnd))
-		fallback = append(fallback, shareMeta...)
-		fallback = append(fallback, headEnd...)
-		indexPage = bytes.ReplaceAll(indexPage, headEnd, fallback)
-		return
+
+	// 占位符匹配不依赖缩进:模板里是 4 空格缩进,前端构建可能改动首尾空白。
+	placeholder := []byte("<!--share-meta-->\n")
+	injected := bytes.Replace(page, placeholder, shareMeta, 1)
+	if !bytes.Equal(injected, page) {
+		common.SysLog(fmt.Sprintf("share meta injected at placeholder: site_name=%q image=%q url=%q",
+			siteName, imageURL, baseURL))
+		return injected, nil
 	}
-	indexPage = injected
-}
 
-// shareOption 读取 common.OptionMap 里的后台配置项(启动阶段已由 loadOptionsFromDatabase 填充)。
-func shareOption(key string) string {
-	common.OptionMapRWMutex.RLock()
-	defer common.OptionMapRWMutex.RUnlock()
-	return common.OptionMap[key]
-}
-
-func isAbsoluteURL(s string) bool {
-	return strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://")
+	// 占位符没被前端构建保留:退到在第一个 </head> 前插入(降级路径),避免注入静默失效
+	// (否则分享卡片继续显示默认 New API 品牌,正是本注入要修的问题)。
+	headEnd := []byte("</head>")
+	fallback := bytes.Replace(page, headEnd, append(shareMeta, headEnd...), 1)
+	if bytes.Equal(fallback, page) {
+		return nil, fmt.Errorf("share meta: 占位符 %s 与 </head> 都不存在,无法注入", "<!--share-meta-->")
+	}
+	common.SysLog(fmt.Sprintf("share meta injected before </head> (placeholder missing, degraded path): site_name=%q image=%q url=%q",
+		siteName, imageURL, baseURL))
+	return fallback, nil
 }
 
 func InitResources() error {
