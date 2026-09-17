@@ -1,12 +1,11 @@
 # Apex fork 构建文件 —— 基于 rc.24 官方 Dockerfile,把基础镜像/依赖源抽成 ARG。
-# 上游 Dockerfile 的 base 按 digest 钉在 docker.io;内网 arm64 构建机(172.16.12.183)
-# docker.io 被墙,故 Apex 自建镜像时用镜像源覆盖(见 aws-deploy/scripts/build-newapi.sh)。
+# 上游 Dockerfile 的 base 按 digest 钉在 docker.io;内网构建机无法访问 docker.io,
+# 故 Apex 自建镜像时用内网镜像源覆盖。
 #   默认值 = 上游 Dockerfile 的三个 digest 钉定 ref,plain `docker build -f Dockerfile.apex .`
 #   与上游一致、可复现。无法访问 docker.io 的环境必须用 --build-arg 覆盖这三个 ARG 为内网镜像
 #   ref;一旦覆盖,该镜像自身的 digest 由调用方负责钉定(本文件只钉上游 docker.io 的 digest)。
-#   ECR 侧已 IMMUTABLE + 生命周期,digest 钉定与镜像源覆盖互不冲突。
-#   注意:上面提到的 aws-deploy/scripts/build-newapi.sh 不在本仓库内,无法核实它是否真的传了
-#   全部三个 --build-arg;内网构建前请自行确认,否则会拉到被墙的 docker.io。
+#   传这三个 --build-arg 的构建脚本不在本仓库内,无法核实它是否传全;内网构建前请自行确认,
+#   否则会因拉取被墙的 docker.io 而构建失败。
 ARG BUN_IMAGE=oven/bun:1.4.0@sha256:5ff609364c049b54eb0ff560ec96319729a972078ef2c755d758f0c6ef89c2d6
 ARG GOLANG_IMAGE=golang:1.26.1-alpine@sha256:2389ebfa5b7f43eeafbd6be0c3700cc46690ef842ad962f6c5bd6be49ed82039
 ARG DEBIAN_IMAGE=debian:bookworm-slim@sha256:f06537653ac770703bc45b4b113475bd402f451e85223f0f2837acbf89ab020a
@@ -43,11 +42,14 @@ RUN go mod download
 COPY . .
 COPY --from=builder /build/web/dist ./web/dist
 # 运行版本 = 构建时 VERSION 内容(镜像 tag 后缀,须与 /api/status version 精确一致)
-RUN go build -ldflags "-s -w -X 'github.com/QuantumNous/new-api/common.Version=$(cat VERSION)'" -o new-api
+# 仓库里的 VERSION 是空文件,由构建流程在构建前写入;为空时 -X 会静默写入空版本,
+# 使镜像 tag 与 /api/status 的 version 不一致,故这里直接失败而不是产出空版本镜像。
+RUN test -s VERSION || { echo "ERROR: VERSION is empty; the image version and /api/status version would be blank" >&2; exit 1; }; \
+    go build -ldflags "-s -w -X 'github.com/QuantumNous/new-api/common.Version=$(cat VERSION)'" -o new-api
 
 FROM ${DEBIAN_IMAGE}
-# apt 源也走镜像源:deb.debian.org 在部分网络(如 183 构建机)大文件极慢/半挂。
-# 默认 deb.debian.org 时不替换(镜像源同样可跑);经 ARG 换成国内镜像即可加速。
+# apt 源也走镜像源:部分网络下从 deb.debian.org 拉取大文件极慢或半挂。
+# 默认值 deb.debian.org 时不替换(官方源可用);用 --build-arg APT_MIRROR_HOST=<镜像域名> 覆盖以加速。
 # 安全:APT_MIRROR_HOST 会被插进 sed 脚本,必须先按白名单校验。GNU sed 的 e 命令能把
 # "x|g;e <cmd> #" 这类值变成真正的 shell 执行(以 root 在构建期跑),故只放行
 # [A-Za-z0-9.-](同时排除 sed 的 s 分隔符 |、特殊字符 & \、以及全部 shell 元字符)。
